@@ -123,7 +123,16 @@ class GradCAMpp(GradCAM):
     def forward(self, input, class_idx=None, retain_graph=False):
         b, c, h, w = input.size()
 
-        logit = self.model_arch(input)
+        img_metas = [{'img_shape': (w, h, c), 'scale_factor': 1}]
+        #logit = self.model_arch.simple_test(img=input, img_metas=img_metas)[0]
+        logit = self.model_arch.forward_dummy(img=input)[1]
+
+        for t in logit:
+            if hasattr(t, "shape"):
+                print("shape:", t.shape)
+            else:
+                print("len:", len(t))
+            print(type(t))
         if class_idx is None:
             score = logit[:, logit.max(1)[-1]].squeeze()
         else:
