@@ -59,19 +59,20 @@ class GradCAM:
         self.model_arch(torch.zeros(1, 3, *input_size, device=device))
         return self.activations['value'].shape[2:]
 
-    def forward(self, input, class_idx=None, retain_graph=False):
+    def forward(self, input, level, class_idx=None, retain_graph=False):
         b, c, h, w = input.size()
 
-        logit = self.model_arch(input)
+        cls_logits, reg_logits = self.model_arch.forward_dummy(input)
+        cls_logit = cls_logits[level]
         if class_idx is None:
-            score = logit[:, logit.max(1)[-1]].squeeze()
+            score = cls_logit[:, cls_logit.max(1)[-1]].squeeze()
         else:
-            score = logit[:, class_idx].squeeze()
+            score = cls_logit[:, class_idx::self.model_arch.bbox_head.num_classes, :, :].mean()
 
         self.model_arch.zero_grad()
         score.backward(retain_graph=retain_graph)
         gradients = self.gradients['value']
-        activations = self.activations['value']
+        activations = self.activations['value'][0]
         b, k, u, v = gradients.size()
 
         alpha = gradients.view(b, k, -1).mean(2)
@@ -84,10 +85,10 @@ class GradCAM:
         saliency_map_min, saliency_map_max = saliency_map.min(), saliency_map.max()
         saliency_map = (saliency_map - saliency_map_min).div(saliency_map_max - saliency_map_min).data
 
-        return saliency_map, logit
+        return saliency_map, cls_logit
 
-    def __call__(self, input, class_idx=None, retain_graph=False):
-        return self.forward(input, class_idx, retain_graph)
+    def __call__(self, input, level, class_idx=None, retain_graph=False):
+        return self.forward(input, level, class_idx, retain_graph)
 
 
 class GradCAMpp(GradCAM):
@@ -127,12 +128,6 @@ class GradCAMpp(GradCAM):
         #logit = self.model_arch.simple_test(img=input, img_metas=img_metas)[0]
         logit = self.model_arch.forward_dummy(img=input)[1]
 
-        for t in logit:
-            if hasattr(t, "shape"):
-                print("shape:", t.shape)
-            else:
-                print("len:", len(t))
-            print(type(t))
         if class_idx is None:
             score = logit[:, logit.max(1)[-1]].squeeze()
         else:

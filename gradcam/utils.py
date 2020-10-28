@@ -4,6 +4,22 @@ import torch
 layer_finders = {}
 
 
+def inspect(tensor):
+    print("-----[Start inspection]-----")
+    print(type(tensor))
+    if hasattr(tensor, "shape"):
+        print("shape:", tensor.shape)
+    else:
+        print("len:", len(tensor))
+    print("element:")
+    for t in tensor:
+        if hasattr(t, "shape"):
+            print("shape:", t.shape)
+        else:
+            print("len:", len(t))
+        print(type(t))
+    print("-----[End inspection]-----")
+
 def register_layer_finder(model_type):
     def register(func):
         layer_finders[model_type] = func
