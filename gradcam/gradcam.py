@@ -1,8 +1,13 @@
+import numpy as np
 import torch
 import torch.nn.functional as F
 
-from .utils import layer_finders
+from .utils import layer_finders, inspect
 
+from rich.progress import track
+from rich import pretty, print
+from rich.traceback import install
+install()
 
 class GradCAM:
     """Calculate GradCAM salinecy map.
@@ -61,13 +66,16 @@ class GradCAM:
 
     def forward(self, input, level, class_idx=None, retain_graph=False):
         b, c, h, w = input.size()
+        ratios = (4, 6, 6, 6, 4, 4)
 
         cls_logits, reg_logits = self.model_arch.forward_dummy(input)
-        cls_logit = cls_logits[level]
         if class_idx is None:
-            score = cls_logit[:, cls_logit.max(1)[-1]].squeeze()
+            # todo
+            score = cls_logits[:, cls_logits.max(1)[-1]].squeeze()
         else:
-            score = cls_logit[:, class_idx::self.model_arch.bbox_head.num_classes, :, :].mean()
+            for i, (logit, ratio) in enumerate(zip(cls_logits, ratios)):
+                cls_logits[i] = logit[:, class_idx * ratio::81, :, :]
+            score = torch.cat([logit.flatten() for logit in cls_logits]).mean()
 
         self.model_arch.zero_grad()
         score.backward(retain_graph=retain_graph)
@@ -85,7 +93,7 @@ class GradCAM:
         saliency_map_min, saliency_map_max = saliency_map.min(), saliency_map.max()
         saliency_map = (saliency_map - saliency_map_min).div(saliency_map_max - saliency_map_min).data
 
-        return saliency_map, cls_logit
+        return saliency_map, cls_logits
 
     def __call__(self, input, level, class_idx=None, retain_graph=False):
         return self.forward(input, level, class_idx, retain_graph)
